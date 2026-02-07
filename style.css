@@ -1,0 +1,267 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "DM Sans", system-ui, sans-serif;
+  background: #1a1b1e;
+  color: #e4e4e7;
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+header {
+  margin-bottom: 2rem;
+}
+
+h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.25rem 0;
+}
+
+.subtitle {
+  margin: 0;
+  color: #71717a;
+  font-size: 0.95rem;
+}
+
+/* Setup */
+.setup {
+  background: #25262b;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.setup-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 600px) {
+  .setup-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.setup label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setup label span {
+  font-size: 0.85rem;
+  color: #a1a1aa;
+}
+
+.setup input[type="file"],
+.setup textarea {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  background: #18181b;
+  color: #e4e4e7;
+  font: inherit;
+}
+
+.setup textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+#startBtn {
+  padding: 0.65rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  background: #6366f1;
+  color: white;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+#startBtn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+
+#startBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #71717a;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Game */
+.game {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.game-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.instruction {
+  margin: 0;
+  color: #a1a1aa;
+  font-size: 0.9rem;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag-btn {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  background: #27272a;
+  color: #e4e4e7;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.tag-btn:hover {
+  border-color: #52525b;
+  background: #3f3f46;
+}
+
+.tag-btn.selected {
+  border-color: #6366f1;
+  background: #4338ca33;
+}
+
+.tag-btn.done {
+  border-color: #22c55e;
+  background: #16653433;
+  cursor: default;
+}
+
+.puzzle-wrap {
+  background: #25262b;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.puzzle-grid {
+  display: grid;
+  gap: 2px;
+  margin: 0 auto;
+  max-width: 100%;
+  aspect-ratio: 1;
+  max-height: 400px;
+}
+
+.puzzle-grid .cell {
+  background: #18181b;
+  background-size: cover;
+  background-position: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.puzzle-grid .cell:hover:not(.solved) {
+  transform: scale(1.02);
+  box-shadow: 0 0 0 2px #6366f1;
+}
+
+.puzzle-grid .cell.selected {
+  box-shadow: 0 0 0 3px #6366f1;
+}
+
+.puzzle-grid .cell.solved {
+  background: #27272a !important;
+  cursor: default;
+  opacity: 0.4;
+}
+
+.reconstructed-wrap h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1rem;
+  color: #a1a1aa;
+}
+
+.reconstructed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.reconstructed-item {
+  background: #25262b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.reconstructed-item h4 {
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: #18181b;
+  color: #a1a1aa;
+}
+
+.reconstructed-item .reconstructed-full {
+  padding: 0.5rem;
+  background: #18181b;
+  min-height: 80px;
+}
+
+.reconstructed-item .reconstructed-full canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.reconstructed-item .reconstructed-empty {
+  background: #1f1f23;
+  border-radius: 4px;
+}
+
+.feedback {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.feedback.wrong {
+  background: #7f1d1d33;
+  border: 1px solid #991b1b;
+  color: #fca5a5;
+}
+
+.feedback.correct {
+  background: #14532d33;
+  border: 1px solid #166534;
+  color: #86efac;
+}
