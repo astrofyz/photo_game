@@ -265,3 +265,43 @@ h1 {
   border: 1px solid #166534;
   color: #86efac;
 }
+
+/* Fullscreen overlay (flash on correct + click to expand) */
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  cursor: pointer;
+}
+
+.fullscreen-overlay-inner {
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.fullscreen-overlay-inner canvas {
+  max-width: 100%;
+  max-height: calc(100vh - 2rem);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.reconstructed-clickable {
+  cursor: pointer;
+}
+
+.reconstructed-clickable:hover {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}

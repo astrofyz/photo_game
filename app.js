@@ -11,8 +11,11 @@
   const tagsList = document.getElementById("tagsList");
   const reconstructedGrid = document.getElementById("reconstructedGrid");
   const feedbackEl = document.getElementById("feedback");
+  const fullscreenOverlay = document.getElementById("fullscreenOverlay");
+  const fullscreenCanvas = document.getElementById("fullscreenCanvas");
 
   const MAX_LOAD_WIDTH = 600;
+  const FLASH_DURATION_MS = 2000;
   const MAX_LOAD_HEIGHT = 800;
 
   let state = {
@@ -209,6 +212,84 @@
     feedbackEl.classList.add("hidden");
   }
 
+  function buildFullImageCanvas(imageIndex, maxW, maxH) {
+    const img = state.images[imageIndex];
+    const pieces = img.pieces;
+    const { rows, cols } = getGridSize(state.N);
+    const pieceW = img.width / cols;
+    const pieceH = img.height / rows;
+    const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+    const outW = Math.round(img.width * scale);
+    const outH = Math.round(img.height * scale);
+    const drawW = outW / cols;
+    const drawH = outH / rows;
+
+    const loadPiece = (dataUrl) =>
+      new Promise((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = reject;
+        im.src = dataUrl;
+      });
+
+    return Promise.all(pieces.map((dataUrl, k) => loadPiece(dataUrl).then((im) => ({ im, k })))).then(
+      (loaded) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext("2d");
+        loaded.forEach(({ im, k }) => {
+          const row = Math.floor(k / cols);
+          const col = k % cols;
+          ctx.drawImage(im, 0, 0, pieceW, pieceH, col * drawW, row * drawH, drawW, drawH);
+        });
+        return canvas;
+      }
+    );
+  }
+
+  function showFullscreenFlash(imageIndex, thenRender) {
+    const maxW = Math.min(window.innerWidth * 0.9, 1200);
+    const maxH = Math.min(window.innerHeight * 0.9, 1200);
+    buildFullImageCanvas(imageIndex, maxW, maxH).then((canvas) => {
+      fullscreenCanvas.width = canvas.width;
+      fullscreenCanvas.height = canvas.height;
+      const ctx = fullscreenCanvas.getContext("2d");
+      ctx.drawImage(canvas, 0, 0);
+      fullscreenOverlay.classList.remove("hidden");
+      fullscreenOverlay.setAttribute("aria-hidden", "false");
+      fullscreenOverlay.dataset.mode = "flash";
+      const close = () => {
+        fullscreenOverlay.classList.add("hidden");
+        fullscreenOverlay.setAttribute("aria-hidden", "true");
+        fullscreenOverlay.removeEventListener("click", close);
+        if (thenRender) thenRender();
+      };
+      fullscreenOverlay.addEventListener("click", close);
+      setTimeout(close, FLASH_DURATION_MS);
+    });
+  }
+
+  function showFullscreenImage(imageIndex) {
+    const maxW = Math.min(window.innerWidth * 0.95, 1400);
+    const maxH = Math.min(window.innerHeight * 0.95, 1400);
+    buildFullImageCanvas(imageIndex, maxW, maxH).then((canvas) => {
+      fullscreenCanvas.width = canvas.width;
+      fullscreenCanvas.height = canvas.height;
+      const ctx = fullscreenCanvas.getContext("2d");
+      ctx.drawImage(canvas, 0, 0);
+      fullscreenOverlay.classList.remove("hidden");
+      fullscreenOverlay.setAttribute("aria-hidden", "false");
+      fullscreenOverlay.dataset.mode = "view";
+      const close = () => {
+        fullscreenOverlay.classList.add("hidden");
+        fullscreenOverlay.setAttribute("aria-hidden", "true");
+        fullscreenOverlay.removeEventListener("click", close);
+      };
+      fullscreenOverlay.addEventListener("click", close);
+    });
+  }
+
   function buildReconstructedFullImage(imageIndex, container) {
     const img = state.images[imageIndex];
     const solved = state.reconstructed[imageIndex].some(Boolean);
@@ -243,6 +324,7 @@
       });
 
     const toLoad = pieces.map((dataUrl, k) => loadPiece(dataUrl).then((im) => ({ im, k })));
+    const allSolved = state.puzzle.every((item) => item.solved);
 
     Promise.all(toLoad).then((loaded) => {
       const canvas = document.createElement("canvas");
@@ -256,6 +338,23 @@
       });
       container.innerHTML = "";
       container.appendChild(canvas);
+      if (allSolved) {
+        canvas.classList.add("reconstructed-clickable");
+        canvas.setAttribute("role", "button");
+        canvas.setAttribute("tabindex", "0");
+        canvas.setAttribute("aria-label", "View full size");
+        const openFullscreen = () => showFullscreenImage(imageIndex);
+        canvas.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openFullscreen();
+        });
+        canvas.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openFullscreen();
+          }
+        });
+      }
     });
   }
 
@@ -286,8 +385,8 @@
       feedbackEl.classList.remove("hidden");
       setTimeout(() => {
         feedbackEl.classList.add("hidden");
-        renderGame();
-      }, 600);
+        showFullscreenFlash(imageIndex, renderGame);
+      }, 400);
     } else {
       feedbackEl.textContent = "Wrong tag. Try again.";
       feedbackEl.className = "feedback wrong";
