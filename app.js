@@ -18,6 +18,8 @@
   const FLASH_DURATION_MS = 2000;
   const MAX_LOAD_HEIGHT = 800;
 
+  const DEMO_PHOTOS_BASE = "demo_photos";
+
   let state = {
     images: [],       // [{ tag, pieces, width, height }]
     N: 0,
@@ -53,6 +55,16 @@
         URL.revokeObjectURL(url);
         reject(new Error("Failed to load image"));
       };
+      img.src = url;
+    });
+  }
+
+  function loadImageFromUrl(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Failed to load image"));
       img.src = url;
     });
   }
@@ -116,6 +128,24 @@
   filesInput.addEventListener("change", enableStart);
   tagsInput.addEventListener("input", enableStart);
 
+  function startGameWithImages(images) {
+    const n = images.length;
+    state.images = images;
+    state.N = n;
+    state.reconstructed = images.map(() => Array(n).fill(null));
+
+    const imageIndices = shuffle(images.map((_, i) => i));
+    const assignment = imageIndices.map((imageIndex) => ({
+      imageIndex,
+      pieceIndex: Math.floor(Math.random() * n),
+    }));
+    state.puzzle = shuffle(assignment);
+
+    setupEl.classList.add("hidden");
+    gameEl.classList.remove("hidden");
+    renderGame();
+  }
+
   startBtn.addEventListener("click", async () => {
     const files = Array.from(filesInput.files);
     const tags = parseTags(tagsInput.value);
@@ -148,23 +178,45 @@
       }
     }
 
-    state.images = images;
-    state.N = n;
-    state.reconstructed = images.map(() => Array(n).fill(null));
-
-    // Build puzzle: N positions, each gets one piece from each image (each image used once)
-    const imageIndices = shuffle(images.map((_, i) => i));
-    const assignment = imageIndices.map((imageIndex) => ({
-      imageIndex,
-      pieceIndex: Math.floor(Math.random() * n),
-    }));
-    state.puzzle = shuffle(assignment);
-
-    setupEl.classList.add("hidden");
-    gameEl.classList.remove("hidden");
-    renderGame();
+    startGameWithImages(images);
     startBtn.disabled = false;
     startBtn.textContent = "Start puzzle";
+  });
+
+  document.getElementById("demoBtn").addEventListener("click", async () => {
+    const demoBtn = document.getElementById("demoBtn");
+    demoBtn.disabled = true;
+    demoBtn.textContent = "Loading demo…";
+
+    try {
+      const listRes = await fetch(`${DEMO_PHOTOS_BASE}/list.json`);
+      if (!listRes.ok) throw new Error("list.json not found");
+      const filenames = await listRes.json();
+      if (!Array.isArray(filenames) || filenames.length < MIN_IMAGES) {
+        throw new Error("list.json must be an array of at least " + MIN_IMAGES + " image filenames");
+      }
+      const n = Math.min(filenames.length, MAX_IMAGES);
+      const images = [];
+      for (let i = 0; i < n; i++) {
+        const filename = filenames[i];
+        const url = `${DEMO_PHOTOS_BASE}/${encodeURIComponent(filename)}`;
+        const img = await loadImageFromUrl(url);
+        const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
+        const pieces = splitImageIntoPieces(resized, n);
+        const tag = filename.replace(/\.[^.]+$/, "") || filename;
+        images.push({
+          tag,
+          pieces,
+          width: resized.width,
+          height: resized.height,
+        });
+      }
+      startGameWithImages(images);
+    } catch (e) {
+      alert("Demo failed to load. Add demo_photos/list.json and image files (see README in demo_photos).");
+    }
+    demoBtn.disabled = false;
+    demoBtn.textContent = "Load demo";
   });
 
   function renderGame() {

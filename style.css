@@ -101,6 +101,40 @@ h1 {
   cursor: not-allowed;
 }
 
+.setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.setup-or {
+  color: #71717a;
+  font-size: 0.9rem;
+}
+
+#demoBtn {
+  padding: 0.65rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  background: #27272a;
+  color: #e4e4e7;
+  cursor: pointer;
+}
+
+#demoBtn:hover:not(:disabled) {
+  background: #3f3f46;
+  border-color: #52525b;
+}
+
+#demoBtn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .hint {
   margin: 0;
   font-size: 0.8rem;

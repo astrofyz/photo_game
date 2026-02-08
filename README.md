@@ -2,19 +2,6 @@
 
 A small web game: upload N images with tags, each image is split into N pieces, and a composite puzzle is built from one random piece per image. Match each piece to its tag by clicking the piece then the correct tag.
 
-## How to run
-
-Open `index.html` in a browser, or serve the folder locally:
-
-```bash
-# Python 3
-python3 -m http.server 8080
-
-# or npx
-npx serve .
-```
-
-Then go to `http://localhost:8080` (or the port shown).
 
 ## How to play
 
