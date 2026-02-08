@@ -13,6 +13,13 @@
   const feedbackEl = document.getElementById("feedback");
   const fullscreenOverlay = document.getElementById("fullscreenOverlay");
   const fullscreenCanvas = document.getElementById("fullscreenCanvas");
+  const puzzleWrap = document.querySelector(".puzzle-wrap");
+  const puzzleGallery = document.getElementById("puzzleGallery");
+  const galleryImageWrap = document.getElementById("galleryImageWrap");
+  const galleryCaption = document.getElementById("galleryCaption");
+  const galleryPrevBtn = document.getElementById("galleryPrev");
+  const galleryNextBtn = document.getElementById("galleryNext");
+  const instructionEl = document.getElementById("instruction");
 
   const MAX_LOAD_WIDTH = 600;
   const FLASH_DURATION_MS = 2000;
@@ -26,6 +33,8 @@
     puzzle: [],       // [{ imageIndex, pieceIndex, element, solved }]
     selectedCell: null,
     reconstructed: [], // [imageIndex][] -> piece dataURL or null
+    galleryIndex: 0,
+    galleryCanvases: {}, // cache full image canvases for gallery
   };
 
   function getGridSize(n) {
@@ -220,22 +229,40 @@
   });
 
   function renderGame() {
-    const { rows, cols } = getGridSize(state.N);
-    puzzleGrid.innerHTML = "";
-    puzzleGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    puzzleGrid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    const allSolved = state.puzzle.every((item) => item.solved);
 
-    state.puzzle.forEach((item, index) => {
-      const cell = document.createElement("div");
-      cell.className = "cell" + (item.solved ? " solved" : "");
-      cell.dataset.index = String(index);
-      if (!item.solved) {
-        cell.style.backgroundImage = `url(${state.images[item.imageIndex].pieces[item.pieceIndex]})`;
-      }
-      cell.addEventListener("click", () => onPuzzleCellClick(index));
-      state.puzzle[index].element = cell;
-      puzzleGrid.appendChild(cell);
-    });
+    if (allSolved) {
+      puzzleGrid.classList.add("hidden");
+      puzzleGallery.classList.remove("hidden");
+      puzzleGallery.setAttribute("aria-hidden", "false");
+      if (instructionEl) instructionEl.textContent = "Gallery — click through photos or click image for full screen.";
+      galleryCaption.textContent = state.images[state.galleryIndex].tag;
+      renderGalleryImage();
+      galleryPrevBtn.disabled = false;
+      galleryNextBtn.disabled = false;
+    } else {
+      if (instructionEl) instructionEl.textContent = "Click a puzzle piece, then click the correct tag.";
+      puzzleGallery.classList.add("hidden");
+      puzzleGallery.setAttribute("aria-hidden", "true");
+      puzzleGrid.classList.remove("hidden");
+      const { rows, cols } = getGridSize(state.N);
+      puzzleGrid.innerHTML = "";
+      puzzleGrid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      puzzleGrid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+
+      state.puzzle.forEach((item, index) => {
+        const cell = document.createElement("div");
+        cell.className = "cell" + (item.solved ? " solved" : "");
+        cell.dataset.index = String(index);
+        if (!item.solved) {
+          cell.style.backgroundImage = `url(${state.images[item.imageIndex].pieces[item.pieceIndex]})`;
+        }
+        cell.addEventListener("click", () => onPuzzleCellClick(index));
+        state.puzzle[index].element = cell;
+        puzzleGrid.appendChild(cell);
+      });
+    }
 
     tagsList.innerHTML = "";
     state.images.forEach((img, i) => {
@@ -262,6 +289,51 @@
     });
 
     feedbackEl.classList.add("hidden");
+  }
+
+  const GALLERY_IMAGE_MAX = 500;
+
+  function renderGalleryImage() {
+    const i = state.galleryIndex;
+    galleryCaption.textContent = state.images[i].tag;
+    galleryPrevBtn.disabled = state.N <= 1;
+    galleryNextBtn.disabled = state.N <= 1;
+    if (state.N > 1) {
+      galleryPrevBtn.style.visibility = "visible";
+      galleryNextBtn.style.visibility = "visible";
+    } else {
+      galleryPrevBtn.style.visibility = "hidden";
+      galleryNextBtn.style.visibility = "hidden";
+    }
+
+    const useCache = state.galleryCanvases[i];
+    const build = () =>
+      buildFullImageCanvas(i, GALLERY_IMAGE_MAX, GALLERY_IMAGE_MAX).then((canvas) => {
+        state.galleryCanvases[i] = canvas;
+        return canvas;
+      });
+
+    const promise = useCache ? Promise.resolve(useCache) : build();
+    promise.then((canvas) => {
+      galleryImageWrap.innerHTML = "";
+      // cloneNode() does not copy canvas bitmap; draw onto a new canvas instead
+      const display = document.createElement("canvas");
+      display.width = canvas.width;
+      display.height = canvas.height;
+      display.getContext("2d").drawImage(canvas, 0, 0);
+      display.classList.add("gallery-current");
+      display.setAttribute("role", "button");
+      display.setAttribute("tabindex", "0");
+      display.setAttribute("aria-label", "View full size");
+      display.addEventListener("click", () => showFullscreenImage(i));
+      display.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          showFullscreenImage(i);
+        }
+      });
+      galleryImageWrap.appendChild(display);
+    });
   }
 
   function buildFullImageCanvas(imageIndex, maxW, maxH) {
@@ -446,6 +518,18 @@
       setTimeout(() => feedbackEl.classList.add("hidden"), 1500);
     }
   }
+
+  galleryPrevBtn.addEventListener("click", () => {
+    if (state.N <= 1) return;
+    state.galleryIndex = (state.galleryIndex - 1 + state.N) % state.N;
+    renderGalleryImage();
+  });
+
+  galleryNextBtn.addEventListener("click", () => {
+    if (state.N <= 1) return;
+    state.galleryIndex = (state.galleryIndex + 1) % state.N;
+    renderGalleryImage();
+  });
 
   enableStart();
 })();

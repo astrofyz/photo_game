@@ -34,11 +34,19 @@
 
     <section class="game hidden" id="game">
       <div class="game-header">
-        <p class="instruction">Click a puzzle piece, then click the correct tag.</p>
+        <p class="instruction" id="instruction">Click a puzzle piece, then click the correct tag.</p>
         <div class="tags-list" id="tagsList"></div>
       </div>
       <div class="puzzle-wrap">
         <div class="puzzle-grid" id="puzzleGrid"></div>
+        <div class="puzzle-gallery hidden" id="puzzleGallery" aria-hidden="true">
+          <button type="button" class="gallery-prev" id="galleryPrev" aria-label="Previous photo">‹</button>
+          <div class="gallery-main">
+            <div class="gallery-image-wrap" id="galleryImageWrap"></div>
+            <p class="gallery-caption" id="galleryCaption"></p>
+          </div>
+          <button type="button" class="gallery-next" id="galleryNext" aria-label="Next photo">›</button>
+        </div>
       </div>
       <div class="reconstructed-wrap">
         <h3>Reconstructed</h3>
