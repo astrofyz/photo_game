@@ -2,7 +2,10 @@
 
 A small web game: upload N images with tags, each image is split into N pieces, and a composite puzzle is built from one random piece per image. Match each piece to its tag by clicking the piece then the correct tag.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> e339764f4bd0e5d181d716e01f21db50cbac81c6
 ## How to play
 
 1. **Setup**: Choose 2–25 images and enter one tag per line (same order as the file list). Tags can be separated by newlines or commas.
