@@ -130,6 +130,43 @@ h1 {
   border-color: #52525b;
 }
 
+.met-count-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.met-count-wrap #metBtn {
+  padding: 0.65rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  background: #27272a;
+  color: #e4e4e7;
+  cursor: pointer;
+}
+
+.met-count-wrap #metBtn:hover:not(:disabled) {
+  background: #3f3f46;
+  border-color: #52525b;
+}
+
+.met-count-label {
+  font-size: 0.9rem;
+  color: #71717a;
+}
+
+#metCount {
+  width: 3.5rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 1rem;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  background: #27272a;
+  color: #e4e4e7;
+}
+
 #demoBtn:disabled {
   opacity: 0.7;
   cursor: wait;

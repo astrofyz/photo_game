@@ -26,6 +26,17 @@
   const MAX_LOAD_HEIGHT = 800;
 
   const DEMO_PHOTOS_BASE = "demo_photos";
+  const MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1";
+  const MET_IMAGE_HOST = "images.metmuseum.org";
+
+  function getMetImageUrl(primaryImageUrl) {
+    if (!primaryImageUrl || !primaryImageUrl.includes(MET_IMAGE_HOST))
+      return primaryImageUrl;
+    const origin = window.location.origin;
+    if (origin && (origin.startsWith("http://") || origin.startsWith("https://")))
+      return origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
+    return primaryImageUrl;
+  }
 
   let state = {
     images: [],       // [{ tag, pieces, width, height }]
@@ -226,6 +237,94 @@
     }
     demoBtn.disabled = false;
     demoBtn.textContent = "Load demo";
+  });
+
+  async function fetchMetPaintings(count) {
+    const res = await fetch(
+      `${MET_API_BASE}/search?isHighlight=true&hasImages=true&q=painting`
+    );
+    if (!res.ok) throw new Error("Met search failed");
+    const data = await res.json();
+    if (!data.objectIDs || data.objectIDs.length === 0) throw new Error("No Met results");
+    const shuffled = shuffle(data.objectIDs);
+    const paintings = [];
+    for (const id of shuffled) {
+      if (paintings.length >= count) break;
+      try {
+        const objRes = await fetch(`${MET_API_BASE}/objects/${id}`);
+        if (!objRes.ok) continue;
+        const obj = await objRes.json();
+        if (
+          obj.objectName !== "Painting" ||
+          !obj.primaryImage
+        ) continue;
+        const tag =
+          (obj.artistDisplayName && obj.artistDisplayName.trim()) ||
+          obj.title ||
+          "Unknown artist";
+        paintings.push({
+          objectID: obj.objectID,
+          primaryImage: obj.primaryImage,
+          tag,
+        });
+      } catch (_) {
+        // skip failed object fetch
+      }
+    }
+    if (paintings.length < MIN_IMAGES) {
+      throw new Error(
+        "Could not find enough highlight paintings. Try again."
+      );
+    }
+    return paintings.slice(0, Math.min(paintings.length, MAX_IMAGES));
+  }
+
+  document.getElementById("metBtn").addEventListener("click", async () => {
+    const origin = window.location.origin;
+    const isLocalServer =
+      origin && (origin.startsWith("http://") || origin.startsWith("https://"));
+    if (!isLocalServer) {
+      alert(
+        'Met images require the app to be served from the local server (CORS).\n\nRun in the project folder:\n  node server.js\nThen open: http://localhost:3000'
+      );
+      return;
+    }
+
+    const metBtn = document.getElementById("metBtn");
+    const countInput = document.getElementById("metCount");
+    let count = parseInt(countInput.value, 10);
+    if (Number.isNaN(count) || count < MIN_IMAGES) count = MIN_IMAGES;
+    if (count > MAX_IMAGES) count = MAX_IMAGES;
+    countInput.value = count;
+
+    metBtn.disabled = true;
+    metBtn.textContent = "Loading from Met…";
+
+    try {
+      const metItems = await fetchMetPaintings(count);
+      const n = metItems.length;
+      const images = [];
+      for (let i = 0; i < n; i++) {
+        const item = metItems[i];
+        const img = await loadImageFromUrl(getMetImageUrl(item.primaryImage));
+        const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
+        const pieces = splitImageIntoPieces(resized, n);
+        images.push({
+          tag: item.tag,
+          pieces,
+          width: resized.width,
+          height: resized.height,
+        });
+      }
+      startGameWithImages(images);
+    } catch (e) {
+      alert(
+        "Failed to load from Met: " +
+          (e.message || "network or CORS error. Try again.")
+      );
+    }
+    metBtn.disabled = false;
+    metBtn.textContent = "Load from Met";
   });
 
   function renderGame() {

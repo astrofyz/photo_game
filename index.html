@@ -28,8 +28,14 @@
         <button type="button" id="startBtn" disabled>Start puzzle</button>
         <span class="setup-or">or</span>
         <button type="button" id="demoBtn">Load demo</button>
+        <span class="setup-or">or</span>
+        <label class="met-count-wrap">
+          <button type="button" id="metBtn">Load from Met</button>
+          <span class="met-count-label">images:</span>
+          <input type="number" id="metCount" min="2" max="25" value="8" aria-label="Number of Met images" />
+        </label>
       </div>
-      <p class="hint">Use 2–25 images. Each image is split into N pieces; one random piece from each image forms the puzzle.</p>
+      <p class="hint">Use 2–25 images. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses random highlight paintings from The Met collection; the tag is the artist’s name.</p>
     </section>
 
     <section class="game hidden" id="game">
