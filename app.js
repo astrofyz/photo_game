@@ -35,8 +35,14 @@
   function getMetImageUrl(primaryImageUrl) {
     if (!primaryImageUrl || !primaryImageUrl.includes(MET_IMAGE_HOST))
       return primaryImageUrl;
+    const useDeployedPath =
+      new URLSearchParams(window.location.search).get("proxy") === "1";
     const origin = window.location.origin;
-    if (origin && (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")))
+    if (
+      !useDeployedPath &&
+      origin &&
+      (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"))
+    )
       return origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
     return CORS_PROXY + encodeURIComponent(primaryImageUrl);
   }
