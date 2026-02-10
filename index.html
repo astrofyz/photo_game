@@ -35,12 +35,15 @@
           <input type="number" id="metCount" min="2" max="25" value="8" aria-label="Number of Met images" />
         </label>
       </div>
-      <p class="hint">Use 2–25 images. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses random highlight paintings from The Met collection; the tag is the artist’s name.</p>
+      <p class="hint">Use 2–25 images. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses <code>data/MetObjects_highlight_paintings.csv</code> if available, otherwise the API.</p>
     </section>
 
     <section class="game hidden" id="game">
       <div class="game-header">
         <p class="instruction" id="instruction">Click a puzzle piece, then click the correct tag.</p>
+        <div class="game-header-right">
+          <span class="score-display" id="scoreDisplay" aria-live="polite">Score: 0</span>
+        </div>
         <div class="tags-list" id="tagsList"></div>
       </div>
       <div class="puzzle-wrap">

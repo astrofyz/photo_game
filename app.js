@@ -20,22 +20,33 @@
   const galleryPrevBtn = document.getElementById("galleryPrev");
   const galleryNextBtn = document.getElementById("galleryNext");
   const instructionEl = document.getElementById("instruction");
+  const scoreDisplayEl = document.getElementById("scoreDisplay");
 
   const MAX_LOAD_WIDTH = 600;
   const FLASH_DURATION_MS = 2000;
   const MAX_LOAD_HEIGHT = 800;
 
   const DEMO_PHOTOS_BASE = "demo_photos";
+  const MET_CSV_DEFAULT = "data/MetObjects_highlight_paintings.csv";
   const MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1";
   const MET_IMAGE_HOST = "images.metmuseum.org";
+  const CORS_PROXY = "https://api.cors.lol/?url=";
 
   function getMetImageUrl(primaryImageUrl) {
     if (!primaryImageUrl || !primaryImageUrl.includes(MET_IMAGE_HOST))
       return primaryImageUrl;
     const origin = window.location.origin;
-    if (origin && (origin.startsWith("http://") || origin.startsWith("https://")))
+    if (origin && (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")))
       return origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
-    return primaryImageUrl;
+    return CORS_PROXY + encodeURIComponent(primaryImageUrl);
+  }
+
+  /** Points per attempt: 1st = 100, 2nd = 50, 3rd = 25, 4th+ = 10 */
+  function pointsForAttempt(attemptNumber) {
+    if (attemptNumber <= 1) return 100;
+    if (attemptNumber === 2) return 50;
+    if (attemptNumber === 3) return 25;
+    return 10;
   }
 
   let state = {
@@ -46,12 +57,55 @@
     reconstructed: [], // [imageIndex][] -> piece dataURL or null
     galleryIndex: 0,
     galleryCanvases: {}, // cache full image canvases for gallery
+    score: 0,
+    wrongGuesses: [], // wrongGuesses[puzzleIndex] = count of wrong tag clicks for that piece
   };
 
-  function getGridSize(n) {
-    const cols = Math.ceil(Math.sqrt(n));
-    const rows = Math.ceil(n / cols);
-    return { rows, cols };
+  /**
+   * Get grid rows × cols = n. Optional (imageWidth, imageHeight) picks a factorization
+   * that matches image aspect (portrait → more rows; landscape → more cols).
+   * Without dimensions, picks a factorization closest to square.
+   * Only iterates up to sqrt(n), then adds both (r, n/r) and (n/r, r).
+   */
+  function getGridSize(n, imageWidth, imageHeight) {
+    if (n <= 0) return { rows: 1, cols: 1 };
+    const pairs = [];
+    const limit = Math.floor(Math.sqrt(n));
+    for (let r = 1; r <= limit; r++) {
+      if (n % r !== 0) continue;
+      const c = n / r;
+      pairs.push({ rows: r, cols: c });
+      if (r !== c) pairs.push({ rows: c, cols: r });
+    }
+    if (pairs.length === 0) return { rows: 1, cols: n };
+
+    if (imageWidth != null && imageHeight != null && imageWidth > 0 && imageHeight > 0) {
+      const imageAspect = imageHeight / imageWidth;
+      let best = pairs[0];
+      let bestDiff = Infinity;
+      for (const p of pairs) {
+        const gridAspect = p.rows / p.cols;
+        const diff = Math.abs(gridAspect - imageAspect);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = p;
+        }
+      }
+      return best;
+    }
+
+    let best = pairs[0];
+    let bestDiff = Infinity;
+    const sqrt = Math.sqrt(n);
+    for (const p of pairs) {
+      const gridAspect = p.rows / p.cols;
+      const diff = Math.abs(gridAspect - 1);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = p;
+      }
+    }
+    return best;
   }
 
   function shuffle(arr) {
@@ -110,7 +164,7 @@
   function splitImageIntoPieces(source, n) {
     const w = source.width;
     const h = source.height;
-    const { rows, cols } = getGridSize(n);
+    const { rows, cols } = getGridSize(n, w, h);
     const pieceW = w / cols;
     const pieceH = h / rows;
     const canvas = document.createElement("canvas");
@@ -153,6 +207,8 @@
     state.images = images;
     state.N = n;
     state.reconstructed = images.map(() => Array(n).fill(null));
+    state.score = 0;
+    state.wrongGuesses = [];
 
     const imageIndices = shuffle(images.map((_, i) => i));
     const assignment = imageIndices.map((imageIndex) => ({
@@ -239,6 +295,127 @@
     demoBtn.textContent = "Load demo";
   });
 
+  const MET_OBJECT_BATCH = 15;
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
+    if (lines.length === 0) return { headers: [], rows: [] };
+    const parseRow = (line) => {
+      const out = [];
+      let i = 0;
+      while (i < line.length) {
+        if (line[i] === '"') {
+          let end = i + 1;
+          while (end < line.length) {
+            const next = line.indexOf('"', end);
+            if (next === -1) break;
+            if (line[next + 1] === '"') {
+              end = next + 2;
+              continue;
+            }
+            end = next;
+            break;
+          }
+          out.push(line.slice(i + 1, end).replace(/""/g, '"'));
+          i = end + 1;
+          if (line[i] === ",") i++;
+          continue;
+        }
+        const comma = line.indexOf(",", i);
+        if (comma === -1) {
+          out.push(line.slice(i).trim());
+          break;
+        }
+        out.push(line.slice(i, comma).trim());
+        i = comma + 1;
+      }
+      return out;
+    };
+    const headers = parseRow(lines[0]).map((h) =>
+      h
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+    );
+    const rows = lines.slice(1).map((line) => {
+      const values = parseRow(line);
+      const obj = {};
+      headers.forEach((h, i) => {
+        obj[h] = values[i] !== undefined ? values[i].trim() : "";
+      });
+      return obj;
+    });
+    return { headers, rows };
+  }
+
+  function pickMetRowsFromCSV(csvText, count, options = {}) {
+    const { uniqueArtists: wantUnique, overfetch = 0 } = options;
+    const { headers, rows } = parseCSV(csvText);
+    const imageKey = headers.find(
+      (h) => h.includes("primary") && h.includes("image")
+    );
+    const objectIdKey = headers.find(
+      (h) => h === "object_id" || h === "objectid" || h.replace(/_/g, "") === "objectid"
+    );
+    const artistKey = headers.find(
+      (h) =>
+        h.includes("artist") && (h.includes("display") || h.includes("name"))
+    ) || headers.find((h) => h === "artist");
+    const titleKey = headers.find((h) => h === "title");
+
+    const tagFor = (r) =>
+      (artistKey && r[artistKey] && r[artistKey].trim()) ||
+      (titleKey && r[titleKey] && r[titleKey].trim()) ||
+      "Unknown artist";
+
+    const uniqueByTag = (list) => {
+      if (!wantUnique) return list;
+      const seen = new Set();
+      return list.filter((r) => {
+        const tag = tagFor(r);
+        if (seen.has(tag)) return false;
+        seen.add(tag);
+        return true;
+      });
+    };
+
+    if (imageKey) {
+      const withUrl = rows.filter((r) => r[imageKey] && r[imageKey].includes("images.metmuseum.org"));
+      if (withUrl.length < MIN_IMAGES)
+        throw new Error("CSV has too few rows with image URLs (need at least " + MIN_IMAGES + ")");
+      const pool = wantUnique ? uniqueByTag(withUrl) : withUrl;
+      const shuffled = shuffle(pool);
+      const take = Math.min(count, shuffled.length);
+      return shuffled.slice(0, take).map((r) => ({
+        primaryImage: r[imageKey],
+        tag: tagFor(r),
+      }));
+    }
+    if (!objectIdKey) throw new Error("CSV must have primary_image or object_id column");
+    const withId = rows.filter((r) => r[objectIdKey] && r[objectIdKey].trim());
+    if (withId.length < MIN_IMAGES)
+      throw new Error("CSV has too few rows with object IDs (need at least " + MIN_IMAGES + ")");
+    const pool = wantUnique ? uniqueByTag(withId) : withId;
+    const shuffled = shuffle(pool);
+    const take = Math.min(count + overfetch, shuffled.length);
+    return shuffled.slice(0, take).map((r) => ({
+      objectID: r[objectIdKey].trim(),
+      tag: tagFor(r),
+    }));
+  }
+
+  async function fetchMetObjectsById(items) {
+    const results = await Promise.all(
+      items.map((item) =>
+        fetch(`${MET_API_BASE}/objects/${item.objectID}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+          .then((obj) => (obj && obj.primaryImage ? { ...item, primaryImage: obj.primaryImage } : null))
+      )
+    );
+    return results.filter(Boolean);
+  }
+
   async function fetchMetPaintings(count) {
     const res = await fetch(
       `${MET_API_BASE}/search?isHighlight=true&hasImages=true&q=painting`
@@ -248,27 +425,30 @@
     if (!data.objectIDs || data.objectIDs.length === 0) throw new Error("No Met results");
     const shuffled = shuffle(data.objectIDs);
     const paintings = [];
-    for (const id of shuffled) {
-      if (paintings.length >= count) break;
-      try {
-        const objRes = await fetch(`${MET_API_BASE}/objects/${id}`);
-        if (!objRes.ok) continue;
-        const obj = await objRes.json();
-        if (
-          obj.objectName !== "Painting" ||
-          !obj.primaryImage
-        ) continue;
+    let offset = 0;
+    while (paintings.length < count && offset < shuffled.length) {
+      const batchIds = shuffled.slice(offset, offset + MET_OBJECT_BATCH);
+      offset += MET_OBJECT_BATCH;
+      const batch = await Promise.all(
+        batchIds.map((id) =>
+          fetch(`${MET_API_BASE}/objects/${id}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        )
+      );
+      for (const obj of batch) {
+        if (!obj || obj.objectName !== "Painting" || !obj.primaryImage) continue;
         const tag =
           (obj.artistDisplayName && obj.artistDisplayName.trim()) ||
           obj.title ||
           "Unknown artist";
+        if (paintings.some((p) => p.tag === tag)) continue;
         paintings.push({
           objectID: obj.objectID,
           primaryImage: obj.primaryImage,
           tag,
         });
-      } catch (_) {
-        // skip failed object fetch
+        if (paintings.length >= count) break;
       }
     }
     if (paintings.length < MIN_IMAGES) {
@@ -280,16 +460,6 @@
   }
 
   document.getElementById("metBtn").addEventListener("click", async () => {
-    const origin = window.location.origin;
-    const isLocalServer =
-      origin && (origin.startsWith("http://") || origin.startsWith("https://"));
-    if (!isLocalServer) {
-      alert(
-        'Met images require the app to be served from the local server (CORS).\n\nRun in the project folder:\n  node server.js\nThen open: http://localhost:3000'
-      );
-      return;
-    }
-
     const metBtn = document.getElementById("metBtn");
     const countInput = document.getElementById("metCount");
     let count = parseInt(countInput.value, 10);
@@ -301,21 +471,36 @@
     metBtn.textContent = "Loading from Met…";
 
     try {
-      const metItems = await fetchMetPaintings(count);
+      let metItems;
+      const csvRes = await fetch(MET_CSV_DEFAULT);
+      if (csvRes.ok) {
+        const csvText = await csvRes.text();
+        const overfetch = 20;
+        metItems = pickMetRowsFromCSV(csvText, count, {
+          uniqueArtists: true,
+          overfetch,
+        });
+        if (metItems[0] && metItems[0].objectID && !metItems[0].primaryImage) {
+          metItems = await fetchMetObjectsById(metItems);
+          metItems = metItems.slice(0, count);
+        }
+      } else {
+        metItems = await fetchMetPaintings(count);
+      }
       const n = metItems.length;
-      const images = [];
-      for (let i = 0; i < n; i++) {
-        const item = metItems[i];
-        const img = await loadImageFromUrl(getMetImageUrl(item.primaryImage));
+      const loadedImgs = await Promise.all(
+        metItems.map((item) => loadImageFromUrl(getMetImageUrl(item.primaryImage)))
+      );
+      const images = loadedImgs.map((img, i) => {
         const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
         const pieces = splitImageIntoPieces(resized, n);
-        images.push({
-          tag: item.tag,
+        return {
+          tag: metItems[i].tag,
           pieces,
           width: resized.width,
           height: resized.height,
-        });
-      }
+        };
+      });
       startGameWithImages(images);
     } catch (e) {
       alert(
@@ -327,14 +512,19 @@
     metBtn.textContent = "Load from Met";
   });
 
+  function updateScoreDisplay() {
+    if (scoreDisplayEl) scoreDisplayEl.textContent = "Score: " + state.score;
+  }
+
   function renderGame() {
     const allSolved = state.puzzle.every((item) => item.solved);
+    updateScoreDisplay();
 
     if (allSolved) {
       puzzleGrid.classList.add("hidden");
       puzzleGallery.classList.remove("hidden");
       puzzleGallery.setAttribute("aria-hidden", "false");
-      if (instructionEl) instructionEl.textContent = "Gallery — click through photos or click image for full screen.";
+      if (instructionEl) instructionEl.textContent = "Gallery — click through photos or click image for full screen. Final score: " + state.score;
       galleryCaption.textContent = state.images[state.galleryIndex].tag;
       renderGalleryImage();
       galleryPrevBtn.disabled = false;
@@ -438,7 +628,7 @@
   function buildFullImageCanvas(imageIndex, maxW, maxH) {
     const img = state.images[imageIndex];
     const pieces = img.pieces;
-    const { rows, cols } = getGridSize(state.N);
+    const { rows, cols } = getGridSize(state.N, img.width, img.height);
     const pieceW = img.width / cols;
     const pieceH = img.height / rows;
     const scale = Math.min(maxW / img.width, maxH / img.height, 1);
@@ -532,7 +722,7 @@
     }
 
     const pieces = img.pieces;
-    const { rows, cols } = getGridSize(state.N);
+    const { rows, cols } = getGridSize(state.N, img.width, img.height);
     const pieceW = img.width / cols;
     const pieceH = img.height / rows;
     const drawW = outW / cols;
@@ -596,21 +786,28 @@
   function onTagClick(imageIndex) {
     if (state.selectedCell === null) return;
     const item = state.puzzle[state.selectedCell];
+    const cellIndex = state.selectedCell;
 
     if (item.imageIndex === imageIndex) {
+      const attempts = (state.wrongGuesses[cellIndex] || 0) + 1;
+      const points = pointsForAttempt(attempts);
+      state.score += points;
+
       item.solved = true;
       state.reconstructed[imageIndex][item.pieceIndex] =
         state.images[imageIndex].pieces[item.pieceIndex];
       state.selectedCell = null;
       item.element.classList.remove("selected");
-      feedbackEl.textContent = "Correct!";
+      feedbackEl.textContent = attempts === 1 ? `Correct! +${points} pts` : `Correct! +${points} pts (attempt ${attempts})`;
       feedbackEl.className = "feedback correct";
       feedbackEl.classList.remove("hidden");
+      updateScoreDisplay();
       setTimeout(() => {
         feedbackEl.classList.add("hidden");
         showFullscreenFlash(imageIndex, renderGame);
       }, 400);
     } else {
+      state.wrongGuesses[cellIndex] = (state.wrongGuesses[cellIndex] || 0) + 1;
       feedbackEl.textContent = "Wrong tag. Try again.";
       feedbackEl.className = "feedback wrong";
       feedbackEl.classList.remove("hidden");
