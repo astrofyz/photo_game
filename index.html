@@ -22,6 +22,8 @@
         <label>
           <span>Tags (one per line, same order as images)</span>
           <textarea id="tags" rows="6" placeholder="Beach&#10;Mountain&#10;City&#10;..."></textarea>
+          <span class="tags-json-hint">Or load tags from JSON (filename → tag):</span>
+          <input type="file" id="tagsJson" accept=".json,application/json" />
         </label>
       </div>
       <div class="setup-actions">
@@ -35,7 +37,7 @@
           <input type="number" id="metCount" min="2" max="25" value="8" aria-label="Number of Met images" />
         </label>
       </div>
-      <p class="hint">Use 2–25 images. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses <code>data/MetObjects_highlight_paintings.csv</code> if available, otherwise the API.</p>
+      <p class="hint">Use 2–25 images. Tags: type one per line (same order as images) or load a JSON file mapping filenames to tags. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses <code>data/MetObjects_highlight_paintings.csv</code> if available, otherwise the API.</p>
     </section>
 
     <section class="game hidden" id="game">
