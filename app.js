@@ -30,22 +30,11 @@
   const MET_CSV_DEFAULT = "data/MetObjects_highlight_paintings.csv";
   const MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1";
   const MET_IMAGE_HOST = "images.metmuseum.org";
-  const CORS_PROXY = "https://api.cors.lol/?url=";
-
-  function getMetImageUrl(primaryImageUrl) {
-    if (!primaryImageUrl || !primaryImageUrl.includes(MET_IMAGE_HOST))
-      return primaryImageUrl;
-    const useDeployedPath =
-      new URLSearchParams(window.location.search).get("proxy") === "1";
-    const origin = window.location.origin;
-    if (
-      !useDeployedPath &&
-      origin &&
-      (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"))
-    )
-      return origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
-    return CORS_PROXY + encodeURIComponent(primaryImageUrl);
-  }
+  // Free CORS proxies for deployed (GitHub Pages). api.cors.lol can block some origins.
+  const CORS_PROXIES = [
+    "https://api.allorigins.win/raw?url=",
+    "https://corsproxy.org/?",
+  ];
 
   /** Points per attempt: 1st = 100, 2nd = 50, 3rd = 25, 4th+ = 10 */
   function pointsForAttempt(attemptNumber) {
@@ -147,6 +136,30 @@
       img.onerror = () => reject(new Error("Failed to load image"));
       img.src = url;
     });
+  }
+
+  async function loadImageFromUrlWithFallback(primaryImageUrl) {
+    const origin = window.location.origin;
+    const forceCors = new URLSearchParams(window.location.search).get("testCors") === "1";
+    const useLocalProxy =
+      !forceCors &&
+      origin &&
+      (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"));
+    if (useLocalProxy) {
+      const url = origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
+      return loadImageFromUrl(url);
+    }
+    let lastErr;
+    for (const proxy of CORS_PROXIES) {
+      const url = proxy + encodeURIComponent(primaryImageUrl);
+      try {
+        const img = await loadImageFromUrl(url);
+        return img;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Failed to load image");
   }
 
   function resizeToFit(img, maxW, maxH) {
@@ -495,7 +508,7 @@
       }
       const n = metItems.length;
       const loadedImgs = await Promise.all(
-        metItems.map((item) => loadImageFromUrl(getMetImageUrl(item.primaryImage)))
+        metItems.map((item) => loadImageFromUrlWithFallback(item.primaryImage))
       );
       const images = loadedImgs.map((img, i) => {
         const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
