@@ -65,6 +65,13 @@ h1 {
   color: #a1a1aa;
 }
 
+.tags-json-hint {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #71717a;
+}
+
 .setup label.met-count-wrap {
   display: inline-flex;
   flex-direction: row;

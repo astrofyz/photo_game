@@ -6,7 +6,11 @@
   const gameEl = document.getElementById("game");
   const filesInput = document.getElementById("files");
   const tagsInput = document.getElementById("tags");
+  const tagsJsonInput = document.getElementById("tagsJson");
   const startBtn = document.getElementById("startBtn");
+
+  /** Tags loaded from JSON: filename (or path) -> tag. Null if using textarea only. */
+  let tagsFromJson = null;
   const puzzleGrid = document.getElementById("puzzleGrid");
   const tagsList = document.getElementById("tagsList");
   const reconstructedGrid = document.getElementById("reconstructedGrid");
@@ -212,14 +216,71 @@
   }
 
   function enableStart() {
-    const files = filesInput.files;
-    const tags = parseTags(tagsInput.value);
-    const n = Math.min(files.length, tags.length, MAX_IMAGES);
-    startBtn.disabled = n < MIN_IMAGES || tags.length < MIN_IMAGES;
+    const files = Array.from(filesInput.files);
+    const n = Math.min(files.length, MAX_IMAGES);
+    if (n < MIN_IMAGES) {
+      startBtn.disabled = true;
+      return;
+    }
+    if (tagsFromJson) {
+      const matched = files.slice(0, n).filter((f) => tagsFromJson[getFileKey(f.name)]);
+      startBtn.disabled = matched.length < n;
+    } else {
+      const tags = parseTags(tagsInput.value);
+      startBtn.disabled = tags.length < MIN_IMAGES;
+    }
   }
 
+  /** Key for JSON lookup: use filename only (no path) so "photo.jpg" and "folder/photo.jpg" both match. */
+  function getFileKey(name) {
+    return name.split(/[/\\]/).pop() || name;
+  }
+
+  /** Parse JSON tags file into { filename: tag }. Supports object or array of { file/filename, tag }. */
+  function parseTagsJson(json) {
+    const data = typeof json === "string" ? JSON.parse(json) : json;
+    const out = {};
+    if (Array.isArray(data)) {
+      data.forEach((item) => {
+        const file = item.file ?? item.filename ?? item.name;
+        const tag = item.tag ?? item.title ?? item.label;
+        if (file != null && tag != null) out[getFileKey(String(file))] = String(tag).trim();
+      });
+    } else if (data && typeof data === "object") {
+      Object.entries(data).forEach(([key, val]) => {
+        if (val != null) out[getFileKey(key)] = String(val).trim();
+      });
+    }
+    return out;
+  }
+
+  tagsJsonInput.addEventListener("change", () => {
+    const file = tagsJsonInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        tagsFromJson = parseTagsJson(reader.result);
+        const files = Array.from(filesInput.files);
+        if (files.length > 0) {
+          const lines = files.slice(0, MAX_IMAGES).map((f) => tagsFromJson[getFileKey(f.name)] ?? "");
+          tagsInput.value = lines.join("\n");
+        }
+        enableStart();
+      } catch (e) {
+        alert("Invalid JSON. Use { \"filename.jpg\": \"Tag\" } or [ { \"file\": \"x.jpg\", \"tag\": \"Tag\" } ]");
+        tagsFromJson = null;
+      }
+    };
+    reader.readAsText(file);
+    tagsJsonInput.value = "";
+  });
+
   filesInput.addEventListener("change", enableStart);
-  tagsInput.addEventListener("input", enableStart);
+  tagsInput.addEventListener("input", () => {
+    tagsFromJson = null;
+    enableStart();
+  });
 
   function startGameWithImages(images) {
     const n = images.length;
@@ -243,10 +304,17 @@
 
   startBtn.addEventListener("click", async () => {
     const files = Array.from(filesInput.files);
-    const tags = parseTags(tagsInput.value);
-    const n = Math.min(files.length, tags.length, MAX_IMAGES);
+    const n = Math.min(files.length, MAX_IMAGES);
     if (n < MIN_IMAGES) {
-      alert(`Use at least ${MIN_IMAGES} images and ${MIN_IMAGES} tags.`);
+      alert(`Use at least ${MIN_IMAGES} images.`);
+      return;
+    }
+
+    const tags = tagsFromJson
+      ? files.slice(0, n).map((f, i) => tagsFromJson[getFileKey(f.name)] ?? `Image ${i + 1}`)
+      : parseTags(tagsInput.value);
+    if (tags.length < n) {
+      alert(`Provide at least ${n} tags (one per image) in the text field, or load a JSON file with tags for each filename.`);
       return;
     }
 
@@ -260,7 +328,7 @@
         const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
         const pieces = splitImageIntoPieces(resized, n);
         images.push({
-          tag: tags[i] || `Image ${i + 1}`,
+          tag: tags[i] ?? `Image ${i + 1}`,
           pieces,
           width: resized.width,
           height: resized.height,
@@ -408,6 +476,7 @@
       return shuffled.slice(0, take).map((r) => ({
         primaryImage: r[imageKey],
         tag: tagFor(r),
+        title: titleKey && r[titleKey] ? r[titleKey].trim() : undefined,
       }));
     }
     if (!objectIdKey) throw new Error("CSV must have primary_image or object_id column");
@@ -420,6 +489,7 @@
     return shuffled.slice(0, take).map((r) => ({
       objectID: r[objectIdKey].trim(),
       tag: tagFor(r),
+      title: titleKey && r[titleKey] ? r[titleKey].trim() : undefined,
     }));
   }
 
@@ -429,7 +499,15 @@
         fetch(`${MET_API_BASE}/objects/${item.objectID}`)
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null)
-          .then((obj) => (obj && obj.primaryImage ? { ...item, primaryImage: obj.primaryImage } : null))
+          .then((obj) =>
+            obj && obj.primaryImage
+              ? {
+                  ...item,
+                  primaryImage: obj.primaryImage,
+                  title: (obj.title && obj.title.trim()) || item.title,
+                }
+              : null
+          )
       )
     );
     return results.filter(Boolean);
@@ -466,6 +544,7 @@
           objectID: obj.objectID,
           primaryImage: obj.primaryImage,
           tag,
+          title: obj.title ? obj.title.trim() : undefined,
         });
         if (paintings.length >= count) break;
       }
@@ -515,6 +594,7 @@
         const pieces = splitImageIntoPieces(resized, n);
         return {
           tag: metItems[i].tag,
+          title: metItems[i].title,
           pieces,
           width: resized.width,
           height: resized.height,
@@ -544,7 +624,7 @@
       puzzleGallery.classList.remove("hidden");
       puzzleGallery.setAttribute("aria-hidden", "false");
       if (instructionEl) instructionEl.textContent = "Gallery — click through photos or click image for full screen. Final score: " + state.score;
-      galleryCaption.textContent = state.images[state.galleryIndex].tag;
+      galleryCaption.textContent = formatGalleryCaption(state.images[state.galleryIndex]);
       renderGalleryImage();
       galleryPrevBtn.disabled = false;
       galleryNextBtn.disabled = false;
@@ -601,9 +681,13 @@
 
   const GALLERY_IMAGE_MAX = 500;
 
+  function formatGalleryCaption(img) {
+    return img.title ? img.title + " — " + img.tag : img.tag;
+  }
+
   function renderGalleryImage() {
     const i = state.galleryIndex;
-    galleryCaption.textContent = state.images[i].tag;
+    galleryCaption.textContent = formatGalleryCaption(state.images[i]);
     galleryPrevBtn.disabled = state.N <= 1;
     galleryNextBtn.disabled = state.N <= 1;
     if (state.N > 1) {
