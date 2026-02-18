@@ -26,37 +26,36 @@
   const instructionEl = document.getElementById("instruction");
   const scoreDisplayEl = document.getElementById("scoreDisplay");
 
-  const MAX_LOAD_WIDTH = 600;
+  const MAX_LOAD_WIDTH = 1000;
   const FLASH_DURATION_MS = 2000;
-  const MAX_LOAD_HEIGHT = 800;
+  const MAX_LOAD_HEIGHT = 1400;
 
   const DEMO_PHOTOS_BASE = "demo_photos";
   const MET_CSV_DEFAULT = "data/MetObjects_highlight_paintings.csv";
   const MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1";
   const MET_IMAGE_HOST = "images.metmuseum.org";
-  const CORS_PROXY = "https://api.cors.lol/?url=";
+  // Free CORS proxies for deployed (GitHub Pages). api.cors.lol can block some origins.
+  const CORS_PROXIES = [
+    "https://api.allorigins.win/raw?url=",
+    "https://corsproxy.org/?",
+  ];
 
-  function getMetImageUrl(primaryImageUrl) {
-    if (!primaryImageUrl || !primaryImageUrl.includes(MET_IMAGE_HOST))
-      return primaryImageUrl;
-    const useDeployedPath =
-      new URLSearchParams(window.location.search).get("proxy") === "1";
-    const origin = window.location.origin;
-    if (
-      !useDeployedPath &&
-      origin &&
-      (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"))
-    )
-      return origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
-    return CORS_PROXY + encodeURIComponent(primaryImageUrl);
-  }
-
-  /** Points per attempt: 1st = 100, 2nd = 50, 3rd = 25, 4th+ = 10 */
-  function pointsForAttempt(attemptNumber) {
+  /** Raw points per attempt: 1st = 100, 2nd = 50, 3rd = 25, 4th+ = 10. Percent = rawSum / (N*100) * 100 */
+  function rawPointsForAttempt(attemptNumber) {
     if (attemptNumber <= 1) return 100;
     if (attemptNumber === 2) return 50;
     if (attemptNumber === 3) return 25;
     return 10;
+  }
+
+  function scoreAsPercent(rawScore, n) {
+    if (n <= 0) return 0;
+    return (rawScore / (n * 100)) * 100;
+  }
+
+  function formatScore(rawScore, n) {
+    const pct = scoreAsPercent(rawScore, n);
+    return pct >= 99.995 ? "100" : pct.toFixed(1);
   }
 
   let state = {
@@ -67,7 +66,7 @@
     reconstructed: [], // [imageIndex][] -> piece dataURL or null
     galleryIndex: 0,
     galleryCanvases: {}, // cache full image canvases for gallery
-    score: 0,
+    rawScore: 0,
     wrongGuesses: [], // wrongGuesses[puzzleIndex] = count of wrong tag clicks for that piece
   };
 
@@ -151,6 +150,30 @@
       img.onerror = () => reject(new Error("Failed to load image"));
       img.src = url;
     });
+  }
+
+  async function loadImageFromUrlWithFallback(primaryImageUrl) {
+    const origin = window.location.origin;
+    const forceCors = new URLSearchParams(window.location.search).get("testCors") === "1";
+    const useLocalProxy =
+      !forceCors &&
+      origin &&
+      (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"));
+    if (useLocalProxy) {
+      const url = origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
+      return loadImageFromUrl(url);
+    }
+    let lastErr;
+    for (const proxy of CORS_PROXIES) {
+      const url = proxy + encodeURIComponent(primaryImageUrl);
+      try {
+        const img = await loadImageFromUrl(url);
+        return img;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("Failed to load image");
   }
 
   function resizeToFit(img, maxW, maxH) {
@@ -274,7 +297,7 @@
     state.images = images;
     state.N = n;
     state.reconstructed = images.map(() => Array(n).fill(null));
-    state.score = 0;
+    state.rawScore = 0;
     state.wrongGuesses = [];
 
     const imageIndices = shuffle(images.map((_, i) => i));
@@ -574,7 +597,7 @@
       }
       const n = metItems.length;
       const loadedImgs = await Promise.all(
-        metItems.map((item) => loadImageFromUrl(getMetImageUrl(item.primaryImage)))
+        metItems.map((item) => loadImageFromUrlWithFallback(item.primaryImage))
       );
       const images = loadedImgs.map((img, i) => {
         const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
@@ -599,7 +622,7 @@
   });
 
   function updateScoreDisplay() {
-    if (scoreDisplayEl) scoreDisplayEl.textContent = "Score: " + state.score;
+    if (scoreDisplayEl) scoreDisplayEl.textContent = "Score: " + formatScore(state.rawScore, state.N) + "%";
   }
 
   function renderGame() {
@@ -610,7 +633,7 @@
       puzzleGrid.classList.add("hidden");
       puzzleGallery.classList.remove("hidden");
       puzzleGallery.setAttribute("aria-hidden", "false");
-      if (instructionEl) instructionEl.textContent = "Gallery — click through photos or click image for full screen. Final score: " + state.score;
+      if (instructionEl) instructionEl.textContent = "Gallery — click through photos or click image for full screen. Final score: " + formatScore(state.rawScore, state.N) + "%";
       galleryCaption.textContent = formatGalleryCaption(state.images[state.galleryIndex]);
       renderGalleryImage();
       galleryPrevBtn.disabled = false;
@@ -880,15 +903,16 @@
 
     if (item.imageIndex === imageIndex) {
       const attempts = (state.wrongGuesses[cellIndex] || 0) + 1;
-      const points = pointsForAttempt(attempts);
-      state.score += points;
+      const rawPts = rawPointsForAttempt(attempts);
+      state.rawScore += rawPts;
 
       item.solved = true;
       state.reconstructed[imageIndex][item.pieceIndex] =
         state.images[imageIndex].pieces[item.pieceIndex];
       state.selectedCell = null;
       item.element.classList.remove("selected");
-      feedbackEl.textContent = attempts === 1 ? `Correct! +${points} pts` : `Correct! +${points} pts (attempt ${attempts})`;
+      const pctStr = formatScore(rawPts, state.N);
+      feedbackEl.textContent = attempts === 1 ? `Correct! +${pctStr}%` : `Correct! +${pctStr}% (attempt ${attempts})`;
       feedbackEl.className = "feedback correct";
       feedbackEl.classList.remove("hidden");
       updateScoreDisplay();
@@ -921,6 +945,29 @@
     state.galleryIndex = (state.galleryIndex + 1) % state.N;
     renderGalleryImage();
   });
+
+  const themeToggle = document.getElementById("themeToggle");
+  const THEME_KEY = "photo-puzzle-theme";
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    if (themeToggle) {
+      themeToggle.textContent = theme === "light" ? "🌙" : "☀";
+      themeToggle.setAttribute("aria-label", theme === "light" ? "Switch to dark mode" : "Switch to light mode");
+    }
+  }
+  function initTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    const theme = saved === "light" ? "light" : "dark";
+    applyTheme(theme);
+  }
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
+  }
+  initTheme();
 
   enableStart();
 })();
