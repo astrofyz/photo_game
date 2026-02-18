@@ -898,10 +898,15 @@
       }, 400);
     } else {
       state.wrongGuesses[cellIndex] = (state.wrongGuesses[cellIndex] || 0) + 1;
+      const wrongTagBtn = tagsList.querySelector(`[data-image-index="${imageIndex}"]`);
+      if (wrongTagBtn) {
+        wrongTagBtn.classList.add("wrong-glow");
+        setTimeout(() => wrongTagBtn.classList.remove("wrong-glow"), 500);
+      }
       feedbackEl.textContent = "Wrong tag. Try again.";
       feedbackEl.className = "feedback wrong";
       feedbackEl.classList.remove("hidden");
-      setTimeout(() => feedbackEl.classList.add("hidden"), 1500);
+      setTimeout(() => feedbackEl.classList.add("hidden"), 1000);
     }
   }
 

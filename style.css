@@ -254,6 +254,18 @@ h1 {
   background: #4338ca33;
 }
 
+.tag-btn.wrong-glow {
+  box-shadow: 0 0 0 2px #dc2626, 0 0 16px #b91c1c;
+  border-color: #dc2626;
+  animation: wrong-glow-pulse 1s ease-out;
+}
+
+@keyframes wrong-glow-pulse {
+  0% { box-shadow: 0 0 0 2px #dc2626, 0 0 20px #b91c1c; }
+  70% { box-shadow: 0 0 0 2px #dc2626, 0 0 12px #b91c1c; }
+  100% { box-shadow: 0 0 0 2px #dc2626, 0 0 0 #b91c1c; }
+}
+
 .tag-btn.done {
   border-color: #22c55e;
   background: #16653433;
