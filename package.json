@@ -1,0 +1,7 @@
+{
+  "name": "photo-game",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}

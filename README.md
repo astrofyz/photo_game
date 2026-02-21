@@ -11,3 +11,13 @@ A small web game: upload N images with tags, each image is split into N pieces, 
    - **Wrong**: A message appears; you can try another tag for the same piece or select a different piece.
 
 Win by matching all pieces to their tags.
+
+## “Load from Met” (local)
+
+Met Museum images are on a domain that doesn’t allow cross-origin use in the browser, so **“Load from Met”** only works when the app is served from the included local server:
+
+```bash
+node server.js
+```
+
+Then open **http://localhost:3000** in your browser. You can also run `npm start`.

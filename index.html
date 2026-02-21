@@ -8,9 +8,12 @@
 </head>
 <body>
   <div class="app">
-    <header>
-      <h1>Photo Puzzle</h1>
-      <p class="subtitle">Split images into N pieces, mix them, then match each piece to its tag.</p>
+    <header class="header-row">
+      <div>
+        <h1>Photo Puzzle</h1>
+        <p class="subtitle">Split images into N pieces, mix them, then match each piece to its tag.</p>
+      </div>
+      <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to light mode" title="Toggle light/dark mode">☀</button>
     </header>
 
     <section class="setup" id="setup">
@@ -22,19 +25,30 @@
         <label>
           <span>Tags (one per line, same order as images)</span>
           <textarea id="tags" rows="6" placeholder="Beach&#10;Mountain&#10;City&#10;..."></textarea>
+          <span class="tags-json-hint">Or load tags from JSON (filename → tag):</span>
+          <input type="file" id="tagsJson" accept=".json,application/json" />
         </label>
       </div>
       <div class="setup-actions">
         <button type="button" id="startBtn" disabled>Start puzzle</button>
         <span class="setup-or">or</span>
         <button type="button" id="demoBtn">Load demo</button>
+        <span class="setup-or">or</span>
+        <label class="met-count-wrap">
+          <button type="button" id="metBtn">Load from Met</button>
+          <span class="met-count-label">images:</span>
+          <input type="number" id="metCount" min="2" max="25" value="8" aria-label="Number of Met images" />
+        </label>
       </div>
-      <p class="hint">Use 2–25 images. Each image is split into N pieces; one random piece from each image forms the puzzle.</p>
+      <p class="hint">Use 2–25 images. Tags: type one per line (same order as images) or load a JSON file mapping filenames to tags. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses <code>data/MetObjects_highlight_paintings.csv</code> if available, otherwise the API.</p>
     </section>
 
     <section class="game hidden" id="game">
       <div class="game-header">
         <p class="instruction" id="instruction">Click a puzzle piece, then click the correct tag.</p>
+        <div class="game-header-right">
+          <span class="score-display" id="scoreDisplay" aria-live="polite">Score: 0</span>
+        </div>
         <div class="tags-list" id="tagsList"></div>
       </div>
       <div class="puzzle-wrap">
