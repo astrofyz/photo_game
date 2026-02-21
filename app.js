@@ -34,11 +34,6 @@
   const MET_CSV_DEFAULT = "data/MetObjects_highlight_paintings.csv";
   const MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1";
   const MET_IMAGE_HOST = "images.metmuseum.org";
-  // Free CORS proxies for deployed (GitHub Pages). api.cors.lol can block some origins.
-  const CORS_PROXIES = [
-    "https://api.allorigins.win/raw?url=",
-    "https://corsproxy.org/?",
-  ];
 
   /** Raw points per attempt: 1st = 100, 2nd = 50, 3rd = 25, 4th+ = 10. Percent = rawSum / (N*100) * 100 */
   function rawPointsForAttempt(attemptNumber) {
@@ -155,25 +150,19 @@
   async function loadImageFromUrlWithFallback(primaryImageUrl) {
     const origin = window.location.origin;
     const forceCors = new URLSearchParams(window.location.search).get("testCors") === "1";
-    const useLocalProxy =
+    const useOwnProxy =
       !forceCors &&
       origin &&
-      (origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1"));
-    if (useLocalProxy) {
+      (origin.startsWith("http://localhost") ||
+        origin.startsWith("http://127.0.0.1") ||
+        origin.includes("railway.app"));
+    if (useOwnProxy) {
       const url = origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
       return loadImageFromUrl(url);
     }
-    let lastErr;
-    for (const proxy of CORS_PROXIES) {
-      const url = proxy + encodeURIComponent(primaryImageUrl);
-      try {
-        const img = await loadImageFromUrl(url);
-        return img;
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    throw lastErr || new Error("Failed to load image");
+    throw new Error(
+      "Load from Met only works when running with the app server (npm start or Railway). Open this app from localhost or your Railway URL."
+    );
   }
 
   function resizeToFit(img, maxW, maxH) {
