@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
+    "build:met-catalog": "node scripts/build-met-catalog.js",
     "pages:dev": "wrangler pages dev .",
     "pages:deploy": "wrangler pages deploy ."
   },

@@ -22,6 +22,14 @@ npm start
 
 Then open **http://localhost:3000**. On Cloudflare Pages, the same proxy lives at `/api/proxy` via a Pages Function.
 
+The app loads from a prebuilt catalog [`data/met_catalog.json`](data/met_catalog.json) (public-domain highlight paintings with `primaryImageSmall` URLs). After you finish a Met round, use **Another round** in the gallery to load a new set without returning to setup.
+
+To regenerate the catalog from the highlight CSV (requires network):
+
+```bash
+npm run build:met-catalog
+```
+
 ### Deploy to Cloudflare Pages
 
 ```bash
@@ -29,4 +37,4 @@ npm install
 npm run pages:deploy
 ```
 
-Or connect this repo in the Cloudflare dashboard (no build command; output directory `.`). Do not publish `data/MetObjects.csv` — the app uses `data/MetObjects_highlight_paintings.csv`.
+Or connect this repo in the Cloudflare dashboard (no build command; output directory `.`). Do not publish `data/MetObjects.csv` — the app uses `data/met_catalog.json` (and optionally the highlight CSV as a fallback).

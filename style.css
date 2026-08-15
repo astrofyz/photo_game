@@ -279,6 +279,10 @@ h1 {
 
 .game-header-right {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .score-display {
@@ -286,6 +290,27 @@ h1 {
   color: var(--score-color);
   font-size: 1.1rem;
   letter-spacing: 0.02em;
+}
+
+.another-round-btn {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.another-round-btn:hover:not(:disabled) {
+  background: var(--border-hover);
+  border-color: var(--border-hover);
+}
+
+.another-round-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .instruction {

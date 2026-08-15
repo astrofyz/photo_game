@@ -31,9 +31,12 @@
   const MAX_LOAD_HEIGHT = 1400;
 
   const DEMO_PHOTOS_BASE = "demo_photos";
+  const MET_CATALOG_DEFAULT = "data/met_catalog.json";
   const MET_CSV_DEFAULT = "data/MetObjects_highlight_paintings.csv";
   const MET_API_BASE = "https://collectionapi.metmuseum.org/public/collection/v1";
-  const MET_IMAGE_HOST = "images.metmuseum.org";
+
+  /** In-memory Met catalog (from met_catalog.json). */
+  let metCatalogCache = null;
 
   /** Raw points per attempt: 1st = 100, 2nd = 50, 3rd = 25, 4th+ = 10. Percent = rawSum / (N*100) * 100 */
   function rawPointsForAttempt(attemptNumber) {
@@ -54,7 +57,7 @@
   }
 
   let state = {
-    images: [],       // [{ tag, pieces, width, height }]
+    images: [],       // [{ tag, pieces, width, height, title?, objectID? }]
     N: 0,
     puzzle: [],       // [{ imageIndex, pieceIndex, element, solved }]
     selectedCell: null,
@@ -63,6 +66,9 @@
     galleryCanvases: {}, // cache full image canvases for gallery
     rawScore: 0,
     wrongGuesses: [], // wrongGuesses[puzzleIndex] = count of wrong tag clicks for that piece
+    roundSource: null, // "met" | "demo" | "files"
+    metCount: 0,
+    lastMetObjectIds: [],
   };
 
   /**
@@ -200,7 +206,7 @@
         canvas.width = pieceW;
         canvas.height = pieceH;
         ctx.drawImage(source, sx, sy, pieceW, pieceH, 0, 0, pieceW, pieceH);
-        pieces.push(canvas.toDataURL("image/png"));
+        pieces.push(canvas.toDataURL("image/jpeg", 0.85));
       }
     }
     return pieces;
@@ -287,6 +293,9 @@
     state.reconstructed = images.map(() => Array(n).fill(null));
     state.rawScore = 0;
     state.wrongGuesses = [];
+    state.selectedCell = null;
+    state.galleryIndex = 0;
+    state.galleryCanvases = {};
 
     const imageIndices = shuffle(images.map((_, i) => i));
     const assignment = imageIndices.map((imageIndex) => ({
@@ -340,6 +349,7 @@
     }
 
     startGameWithImages(images);
+    state.roundSource = "files";
     startBtn.disabled = false;
     startBtn.textContent = "Start puzzle";
   });
@@ -373,12 +383,82 @@
         });
       }
       startGameWithImages(images);
+      state.roundSource = "demo";
     } catch (e) {
       alert("Demo failed to load. Add demo_photos/list.json and image files (see README in demo_photos).");
     }
     demoBtn.disabled = false;
     demoBtn.textContent = "Load demo";
   });
+
+  async function getMetCatalog() {
+    if (metCatalogCache) return metCatalogCache;
+    const res = await fetch(MET_CATALOG_DEFAULT);
+    if (!res.ok) throw new Error("catalog missing");
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < MIN_IMAGES) {
+      throw new Error("catalog empty");
+    }
+    metCatalogCache = data;
+    return metCatalogCache;
+  }
+
+  function pickMetFromCatalog(catalog, count, excludeIds = []) {
+    const exclude = new Set(excludeIds.map(String));
+    let pool = catalog.filter(
+      (item) => item.primaryImageSmall && !exclude.has(String(item.objectID))
+    );
+    if (pool.length < count) {
+      pool = catalog.filter((item) => item.primaryImageSmall);
+    }
+    if (pool.length < MIN_IMAGES) {
+      throw new Error("Met catalog has too few images");
+    }
+    const shuffled = shuffle(pool.slice());
+    const seen = new Set();
+    const picked = [];
+    for (const item of shuffled) {
+      const tag = (item.tag && String(item.tag).trim()) || "Unknown artist";
+      if (seen.has(tag)) continue;
+      seen.add(tag);
+      picked.push({
+        objectID: item.objectID,
+        primaryImageSmall: item.primaryImageSmall,
+        tag,
+        title: item.title ? String(item.title).trim() : undefined,
+      });
+      if (picked.length >= count) break;
+    }
+    if (picked.length < MIN_IMAGES) {
+      throw new Error("Could not pick enough unique-artist Met images");
+    }
+    return picked.slice(0, Math.min(picked.length, count));
+  }
+
+  async function loadMetRound(count, excludeIds = []) {
+    const catalog = await getMetCatalog();
+    const metItems = pickMetFromCatalog(catalog, count, excludeIds);
+    const loadedImgs = await Promise.all(
+      metItems.map((item) => loadImageFromUrlWithFallback(item.primaryImageSmall))
+    );
+    const n = metItems.length;
+    const images = loadedImgs.map((img, i) => {
+      const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
+      const pieces = splitImageIntoPieces(resized, n);
+      return {
+        tag: metItems[i].tag,
+        title: metItems[i].title,
+        objectID: metItems[i].objectID,
+        pieces,
+        width: resized.width,
+        height: resized.height,
+      };
+    });
+    return {
+      images,
+      objectIDs: metItems.map((m) => m.objectID),
+    };
+  }
 
   const MET_OBJECT_BATCH = 15;
 
@@ -555,50 +635,81 @@
     return paintings.slice(0, Math.min(paintings.length, MAX_IMAGES));
   }
 
+  /** Fallback when met_catalog.json is unavailable: CSV IDs + live API, or search API. */
+  async function loadMetRoundFallback(count) {
+    let metItems;
+    const csvRes = await fetch(MET_CSV_DEFAULT);
+    if (csvRes.ok) {
+      const csvText = await csvRes.text();
+      metItems = pickMetRowsFromCSV(csvText, count, {
+        uniqueArtists: true,
+        overfetch: 20,
+      });
+      if (metItems[0] && metItems[0].objectID && !metItems[0].primaryImage) {
+        metItems = await fetchMetObjectsById(metItems);
+        metItems = metItems.slice(0, count);
+      }
+    } else {
+      metItems = await fetchMetPaintings(count);
+    }
+    const n = metItems.length;
+    const loadedImgs = await Promise.all(
+      metItems.map((item) =>
+        loadImageFromUrlWithFallback(item.primaryImageSmall || item.primaryImage)
+      )
+    );
+    const images = loadedImgs.map((img, i) => {
+      const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
+      const pieces = splitImageIntoPieces(resized, n);
+      return {
+        tag: metItems[i].tag,
+        title: metItems[i].title,
+        objectID: metItems[i].objectID,
+        pieces,
+        width: resized.width,
+        height: resized.height,
+      };
+    });
+    return {
+      images,
+      objectIDs: metItems.map((m) => m.objectID).filter((id) => id != null),
+    };
+  }
+
+  async function loadMetRoundWithFallback(count, excludeIds = []) {
+    try {
+      return await loadMetRound(count, excludeIds);
+    } catch (e) {
+      return await loadMetRoundFallback(count);
+    }
+  }
+
+  function clampMetCount(raw) {
+    let count = parseInt(raw, 10);
+    if (Number.isNaN(count) || count < MIN_IMAGES) count = MIN_IMAGES;
+    if (count > MAX_IMAGES) count = MAX_IMAGES;
+    return count;
+  }
+
+  async function startMetRound(count, excludeIds = []) {
+    const { images, objectIDs } = await loadMetRoundWithFallback(count, excludeIds);
+    state.metCount = images.length;
+    state.lastMetObjectIds = objectIDs;
+    state.roundSource = "met";
+    startGameWithImages(images);
+  }
+
   document.getElementById("metBtn").addEventListener("click", async () => {
     const metBtn = document.getElementById("metBtn");
     const countInput = document.getElementById("metCount");
-    let count = parseInt(countInput.value, 10);
-    if (Number.isNaN(count) || count < MIN_IMAGES) count = MIN_IMAGES;
-    if (count > MAX_IMAGES) count = MAX_IMAGES;
+    const count = clampMetCount(countInput.value);
     countInput.value = count;
 
     metBtn.disabled = true;
     metBtn.textContent = "Loading from Met…";
 
     try {
-      let metItems;
-      const csvRes = await fetch(MET_CSV_DEFAULT);
-      if (csvRes.ok) {
-        const csvText = await csvRes.text();
-        const overfetch = 20;
-        metItems = pickMetRowsFromCSV(csvText, count, {
-          uniqueArtists: true,
-          overfetch,
-        });
-        if (metItems[0] && metItems[0].objectID && !metItems[0].primaryImage) {
-          metItems = await fetchMetObjectsById(metItems);
-          metItems = metItems.slice(0, count);
-        }
-      } else {
-        metItems = await fetchMetPaintings(count);
-      }
-      const n = metItems.length;
-      const loadedImgs = await Promise.all(
-        metItems.map((item) => loadImageFromUrlWithFallback(item.primaryImage))
-      );
-      const images = loadedImgs.map((img, i) => {
-        const resized = resizeToFit(img, MAX_LOAD_WIDTH, MAX_LOAD_HEIGHT);
-        const pieces = splitImageIntoPieces(resized, n);
-        return {
-          tag: metItems[i].tag,
-          title: metItems[i].title,
-          pieces,
-          width: resized.width,
-          height: resized.height,
-        };
-      });
-      startGameWithImages(images);
+      await startMetRound(count);
     } catch (e) {
       alert(
         "Failed to load from Met: " +
@@ -609,6 +720,30 @@
     metBtn.textContent = "Load from Met";
   });
 
+  const anotherRoundBtn = document.getElementById("anotherRoundBtn");
+  if (anotherRoundBtn) {
+    anotherRoundBtn.addEventListener("click", async () => {
+      const count =
+        state.metCount ||
+        clampMetCount(document.getElementById("metCount")?.value);
+      anotherRoundBtn.disabled = true;
+      anotherRoundBtn.textContent = "Loading…";
+      try {
+        await startMetRound(count, state.lastMetObjectIds || []);
+      } catch (e) {
+        alert(
+          "Failed to load from Met: " +
+            (e.message || "network or CORS error. Try again.")
+        );
+        anotherRoundBtn.disabled = false;
+        anotherRoundBtn.textContent = "Another round";
+        return;
+      }
+      anotherRoundBtn.disabled = false;
+      anotherRoundBtn.textContent = "Another round";
+    });
+  }
+
   function updateScoreDisplay() {
     if (scoreDisplayEl) scoreDisplayEl.textContent = "Score: " + formatScore(state.rawScore, state.N) + "%";
   }
@@ -616,6 +751,16 @@
   function renderGame() {
     const allSolved = state.puzzle.every((item) => item.solved);
     updateScoreDisplay();
+
+    if (anotherRoundBtn) {
+      const showAnother =
+        allSolved && state.roundSource === "met" && state.N >= MIN_IMAGES;
+      anotherRoundBtn.classList.toggle("hidden", !showAnother);
+      if (!showAnother) {
+        anotherRoundBtn.disabled = false;
+        anotherRoundBtn.textContent = "Another round";
+      }
+    }
 
     if (allSolved) {
       puzzleGrid.classList.add("hidden");

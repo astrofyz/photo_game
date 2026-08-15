@@ -40,7 +40,7 @@
           <input type="number" id="metCount" min="2" max="25" value="8" aria-label="Number of Met images" />
         </label>
       </div>
-      <p class="hint">Use 2–25 images. Tags: type one per line (same order as images) or load a JSON file mapping filenames to tags. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses <code>data/MetObjects_highlight_paintings.csv</code> if available, otherwise the API.</p>
+      <p class="hint">Use 2–25 images. Tags: type one per line (same order as images) or load a JSON file mapping filenames to tags. Each image is split into N pieces; one random piece from each image forms the puzzle. “Load from Met” uses a prebuilt catalog of public-domain highlight paintings.</p>
     </section>
 
     <section class="game hidden" id="game">
@@ -48,6 +48,7 @@
         <p class="instruction" id="instruction">Click a puzzle piece, then click the correct tag.</p>
         <div class="game-header-right">
           <span class="score-display" id="scoreDisplay" aria-live="polite">Score: 0</span>
+          <button type="button" id="anotherRoundBtn" class="another-round-btn hidden">Another round</button>
         </div>
         <div class="tags-list" id="tagsList"></div>
       </div>
