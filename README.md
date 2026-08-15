@@ -14,10 +14,19 @@ Win by matching all pieces to their tags.
 
 ## “Load from Met” (local)
 
-Met Museum images are on a domain that doesn’t allow cross-origin use in the browser, so **“Load from Met”** only works when the app is served from the included local server:
+Met Museum images are on a domain that doesn’t allow cross-origin use in the browser, so **“Load from Met”** only works when the app is served with the image proxy (local server or Cloudflare Pages):
 
 ```bash
-node server.js
+npm start
 ```
 
-Then open **http://localhost:3000** in your browser. You can also run `npm start`.
+Then open **http://localhost:3000**. On Cloudflare Pages, the same proxy lives at `/api/proxy` via a Pages Function.
+
+### Deploy to Cloudflare Pages
+
+```bash
+npm install
+npm run pages:deploy
+```
+
+Or connect this repo in the Cloudflare dashboard (no build command; output directory `.`). Do not publish `data/MetObjects.csv` — the app uses `data/MetObjects_highlight_paintings.csv`.

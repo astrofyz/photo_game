@@ -150,18 +150,17 @@
   async function loadImageFromUrlWithFallback(primaryImageUrl) {
     const origin = window.location.origin;
     const forceCors = new URLSearchParams(window.location.search).get("testCors") === "1";
+    // Own /api/proxy when served over http(s) (local server, Railway, Cloudflare Pages, etc.)
     const useOwnProxy =
       !forceCors &&
       origin &&
-      (origin.startsWith("http://localhost") ||
-        origin.startsWith("http://127.0.0.1") ||
-        origin.includes("railway.app"));
+      (origin.startsWith("http://") || origin.startsWith("https://"));
     if (useOwnProxy) {
       const url = origin + "/api/proxy?url=" + encodeURIComponent(primaryImageUrl);
       return loadImageFromUrl(url);
     }
     throw new Error(
-      "Load from Met only works when running with the app server (npm start or Railway). Open this app from localhost or your Railway URL."
+      "Load from Met only works when served over http(s) with the app proxy (npm start, Cloudflare Pages, or Railway)."
     );
   }
 
